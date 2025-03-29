@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Horner Bot</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.1.3/socket.io.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <h1>Horner Bot</h1>
+    <img id="video" src="" alt="Video Stream">
+    <input id="switchButton" type="button" value="Switch Object Detection" onclick="switchObjectDetection()" />
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
