@@ -33,23 +33,44 @@ socket.on('state', function(data) {
                 slider.val(data[key])
                 sliderValLabel.text(data[key])
                 break
-            case 'laser_coords':
-                if (!dragging) {
-                    var coordsX = data[key][0]
-                    var coordsY = data[key][1]
-                    laserPositionScaled = [coordsX, coordsY]
-                    updateLaserPosition(coordsX, coordsY)
+            case 'manual_mode':
+                $('#manualModeSwitch').prop('checked', data[key])
+                var laserPoint = $('#laser-point')
+                if (data[key]) {
+                    laserPoint.removeClass('blocked')
+                    laserPoint.css('border-style', 'dotted')
+                }
+                else {
+                    laserPoint.addClass('blocked')
+                    laserPoint.css('border-style', 'none')
                 }
         }
     }
-});
+})
+
+socket.on('laser_coords', function(coords) {
+    if (!dragging) {
+        var coordsX = coords[0]
+        var coordsY = coords[1]
+        laserPositionScaled = [coordsX, coordsY]
+        updateLaserPosition(coordsX, coordsY)
+    }
+})
 
 function updateState(params) {
     socket.emit('update_state', params)
 }
 
+function updateLaserCoords(coords) {
+    socket.emit('update_laser_coords', coords)
+}
+
 function handleYoloCheckbox(cb) {
     updateState({'use_yolo': cb.checked})
+}
+
+function handleManualModeCheckbox(cb) {
+    updateState({'manual_mode': cb.checked})
 }
 
 function handleLaser(cb) {
@@ -71,7 +92,7 @@ var containerWidth = $('#laser-container').outerWidth()
 var containerHeight = $('#laser-container').outerHeight()
 var dragging = false
 
-interact('#laser-point').draggable({
+interact('.draggable:not(.blocked)').draggable({
     listeners: {
         start (event) {
             console.log(event.type, event.target)
@@ -87,7 +108,7 @@ interact('#laser-point').draggable({
             ]
             // console.log(posScaled)
             laserPositionScaled = posScaled
-            updateState({'laser_coords': posScaled})
+            updateLaserCoords(posScaled)
             $('#laser-point').css('transform', `translate(${laserPosition.x}px, ${laserPosition.y}px)`)
         },
         end (event) {

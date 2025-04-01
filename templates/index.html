@@ -27,13 +27,19 @@
                     <input class="form-check-input" type="checkbox" id="yoloSwitch" onclick="handleYoloCheckbox(this)">
                     <label class="form-check-label" for="yoloSwitch">Use YOLO Object Detection</label>
                 </div>
-                <label for="minContourAreaSlider" class="form-label">Minimum Contour Area</label>
-                <input type="range" class="form-range" min="500" max="5000" oninput="handleMinContourAreaSlider(this)" id="minContourAreaSlider" style="width: 80%">
-                <label for="minContourAreaSlider" class="form-label" id="minContourAreaVal"></label>
+                <div>
+                    <label for="minContourAreaSlider" class="form-label">Minimum Contour Area</label>
+                    <input type="range" class="form-range" min="500" max="5000" oninput="handleMinContourAreaSlider(this)" id="minContourAreaSlider" style="width: 80%">
+                    <label for="minContourAreaSlider" class="form-label" id="minContourAreaVal"></label>
+                </div>
             </div>
             <div class="col-lg-5">
                 <div id="laser-container" class="card" style="aspect-ratio: 1/1;">
-                    <div id="laser-point" style="width: 30px; height: 30px; background-color: #0d6efd; border-radius: 50%; touch-action: none; user-select: none"></div>
+                    <div id="laser-point" class="draggable" style="width: 30px; height: 30px; border-width: 3px; border-radius: 50%; touch-action: none; user-select: none"></div>
+                </div>
+                <div class="form-check form-switch mt-3">
+                    <input class="form-check-input" type="checkbox" id="manualModeSwitch" onclick="handleManualModeCheckbox(this)">
+                    <label class="form-check-label" for="manualModeSwitch">Manual Mode</label>
                 </div>
             </div>
         </div>

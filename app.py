@@ -19,10 +19,18 @@ state = {
     'laser_running': False,
     'use_yolo': False,
     'minimum_contour_area': 1500,
-    'laser_coords': [0, 0] # [0, 0] is top left, [1, 1] is bottom right of #laser-container
+    'manual_mode': False
 }
 
+laser_coords = [0.5, 0.5] # [0, 0] is top left, [1, 1] is bottom right of #laser-container
+
 camera = cv2.VideoCapture(0)
+CAMERA_WIDTH = camera.get(cv2.CAP_PROP_FRAME_WIDTH)
+CAMERA_HEIGHT = camera.get(cv2.CAP_PROP_FRAME_HEIGHT)
+CAMERA_FPS =  camera.get(cv2.CAP_PROP_FPS)
+print(f"CAMERA WIDTH: {CAMERA_WIDTH}")
+print(f"CAMERA HEIGHT: {CAMERA_HEIGHT}")
+print(f"CAMERA FPS: {CAMERA_FPS}")
 backsub = cv2.createBackgroundSubtractorMOG2(history=200, varThreshold=16, detectShadows=False)
 # model = YOLO("yolo11n.pt")
 model = YOLO("yolov8n.pt")
@@ -42,19 +50,26 @@ def detect_objects_backsub(frame):
     contours, hierarchy = cv2.findContours(mask_eroded, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     frame_out = frame.copy()
 
-    # biggest_contour = None
-    # for cnt in contours:
-    #     if biggest_contour is None or cv2.contourArea(cnt) > cv2.contourArea(biggest_contour):
-    #         biggest_contour = cnt
+    biggest_contour = None
+    biggest_cnt_area = 0
+    for cnt in contours:
+        cnt_area = cv2.contourArea(cnt)
+        if (biggest_contour is None or cnt_area > biggest_cnt_area) and cnt_area > state['minimum_contour_area']:
+            biggest_contour = cnt
+            biggest_cnt_area = cv2.contourArea(biggest_contour)
     
-    # if biggest_contour is not None:
-    #     x, y, w, h = cv2.boundingRect(biggest_contour)
-    #     frame_out = cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 0, 200), 3)
-
-    large_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > state['minimum_contour_area']]
-    for cnt in large_contours:
-        x, y, w, h = cv2.boundingRect(cnt)
+    if biggest_contour is not None:
+        x, y, w, h = cv2.boundingRect(biggest_contour)
+        if state['laser_running'] and not state['manual_mode']:
+            laser_x = (x + w/2) / CAMERA_WIDTH
+            laser_y = (y + h/2) / CAMERA_HEIGHT
+            socket.emit('laser_coords', [laser_x, laser_y])
         frame_out = cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 0, 200), 3)
+
+    # large_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > state['minimum_contour_area']]
+    # for cnt in large_contours:
+    #     x, y, w, h = cv2.boundingRect(cnt)
+    #     frame_out = cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 0, 200), 3)
 
     return frame_out
 
@@ -98,6 +113,7 @@ def handle_connect():
     client_count += 1
 
     socket.emit('state', state)
+    socket.emit('laser_coords', laser_coords)
 
     if client_count == 1:
         with thread_lock:
@@ -133,7 +149,11 @@ def update_state(params):
         print(f"State property \"{p}\" updated to {new_val}")
     socket.emit('state', params)
     
-
+@socket.on('update_laser_coords')
+def update_laser_coords(new_coords):
+    global laser_coords
+    laser_coords = new_coords
+    socket.emit('laser_coords', new_coords)
 
 if __name__ == '__main__':
     socket.run(app, debug=True, host="0.0.0.0")
