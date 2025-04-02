@@ -1,3 +1,9 @@
+const CLASSES = {
+    0: 'Person',
+    15: 'Cat',
+    67: 'CellPhone'
+}
+
 // var socket = io.connect('10.0.0.39:5000');
 var socket = io()
 
@@ -10,6 +16,10 @@ socket.on('state', function(data) {
         switch (key) {
             case 'use_yolo':
                 $('#yoloSwitch').prop('checked', data[key])
+                if (data[key])
+                    $('#yoloCheckboxes').show()
+                else
+                    $('#yoloCheckboxes').hide()
                 break
             case 'laser_running':
                 var laserBtn = $('#btn_start_laser')
@@ -44,6 +54,12 @@ socket.on('state', function(data) {
                     laserPoint.addClass('blocked')
                     laserPoint.css('border-style', 'none')
                 }
+                break
+            case 'classes_to_detect':
+                for (const class_id in CLASSES) {
+                    const isChecked = data[key].includes(parseInt(class_id))
+                    $(`#detect${CLASSES[class_id]}Radio`).prop('checked', isChecked)
+                }
         }
     }
 })
@@ -65,21 +81,30 @@ function updateLaserCoords(coords) {
     socket.emit('update_laser_coords', coords)
 }
 
-function handleYoloCheckbox(cb) {
-    updateState({'use_yolo': cb.checked})
+function handleYoloCheckbox(el) {
+    updateState({'use_yolo': el.checked})
 }
 
-function handleManualModeCheckbox(cb) {
-    updateState({'manual_mode': cb.checked})
+function handleYoloDetectCheckbox(el) {
+    for (const class_id in CLASSES) {
+        if (el.id == `detect${CLASSES[class_id]}Radio`) {
+            socket.emit('update_class', [class_id, el.checked])
+            break
+        }
+    }
 }
 
-function handleLaser(cb) {
-    const isRunning = cb.innerHTML == 'Start Laser';
+function handleManualModeCheckbox(el) {
+    updateState({'manual_mode': el.checked})
+}
+
+function handleLaser(el) {
+    const isRunning = el.innerHTML == 'Start Laser';
     updateState({'laser_running': isRunning})
 }
 
-function handleMinContourAreaSlider(cb) {
-    const sliderVal = cb.value
+function handleMinContourAreaSlider(el) {
+    const sliderVal = el.value
     console.log(sliderVal)
     updateState({'minimum_contour_area': sliderVal})
 }

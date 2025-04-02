@@ -27,7 +27,27 @@
                     <input class="form-check-input" type="checkbox" id="yoloSwitch" onclick="handleYoloCheckbox(this)">
                     <label class="form-check-label" for="yoloSwitch">Use YOLO Object Detection</label>
                 </div>
-                <div>
+                <div id="yoloCheckboxes">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" name="detectPersonRadio" id="detectPersonRadio" onclick="handleYoloDetectCheckbox(this)">
+                        <label class="form-check-label" for="detectPersonRadio">
+                            Person
+                        </label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" name="detectCatRadio" id="detectCatRadio" onclick="handleYoloDetectCheckbox(this)">
+                        <label class="form-check-label" for="detectCatRadio">
+                            Cat
+                        </label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" name="detectCellPhoneRadio" id="detectCellPhoneRadio" onclick="handleYoloDetectCheckbox(this)">
+                        <label class="form-check-label" for="detectCellPhoneRadio">
+                            Cell Phone
+                        </label>
+                    </div>
+                </div>
+                <div class="mt-4">
                     <label for="minContourAreaSlider" class="form-label">Minimum Contour Area</label>
                     <input type="range" class="form-range" min="500" max="5000" oninput="handleMinContourAreaSlider(this)" id="minContourAreaSlider" style="width: 80%">
                     <label for="minContourAreaSlider" class="form-label" id="minContourAreaVal"></label>

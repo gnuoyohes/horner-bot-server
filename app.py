@@ -3,6 +3,7 @@ from flask_socketio import SocketIO
 from threading import Event, Lock
 import cv2
 from ultralytics import YOLO
+import torch
 import base64
 import psutil
 
@@ -18,13 +19,15 @@ client_count = 0
 state = {
     'laser_running': False,
     'use_yolo': False,
-    'minimum_contour_area': 1500,
-    'manual_mode': False
+    'minimum_contour_area': 2000,
+    'manual_mode': False,
+    'classes_to_detect': [0] # 0: person, 15: cat, 67: cell phone
 }
 
 laser_coords = [0.5, 0.5] # [0, 0] is top left, [1, 1] is bottom right of #laser-container
 
-camera = cv2.VideoCapture(0)
+CAMERA_INDEX = 1
+camera = cv2.VideoCapture(CAMERA_INDEX)
 CAMERA_WIDTH = camera.get(cv2.CAP_PROP_FRAME_WIDTH)
 CAMERA_HEIGHT = camera.get(cv2.CAP_PROP_FRAME_HEIGHT)
 CAMERA_FPS =  camera.get(cv2.CAP_PROP_FPS)
@@ -32,13 +35,34 @@ print(f"CAMERA WIDTH: {CAMERA_WIDTH}")
 print(f"CAMERA HEIGHT: {CAMERA_HEIGHT}")
 print(f"CAMERA FPS: {CAMERA_FPS}")
 backsub = cv2.createBackgroundSubtractorMOG2(history=200, varThreshold=16, detectShadows=False)
-model = YOLO("yolo11n.pt")
+
+yolo_device = 'cuda' if torch.cuda.is_available() else 'cpu'
+print(f'Using device: {yolo_device}')
+model = YOLO("yolo11s.pt").to(yolo_device)
+# model = YOLO("yolo11n.pt").to(yolo_device)
 # model = YOLO("yolov8n.pt")
 
 def detect_objects_yolo(frame):
-    results = model.track(frame, persist=False, show=True, conf=0.8, imgsz=(CAMERA_HEIGHT, CAMERA_WIDTH), half=False, max_det=3)
+    results = model.track(
+        frame,
+        verbose=False,
+        persist=True,
+        conf=0.3,
+        classes=state['classes_to_detect'],
+        imgsz=(CAMERA_HEIGHT, CAMERA_WIDTH),
+        half=False,
+        max_det=3
+    )
     # print(results)
-    return results[0].plot()
+    result = results[0]
+    if len(result.boxes) > 0:
+        det = result.boxes[0]
+        x, y, width, height = det.xywhn[0].tolist()
+        if state['laser_running'] and not state['manual_mode']:
+            socket.emit('laser_coords', [x, y])
+        # print(f"{x}, {y}, {width}, {height}")
+
+    return result.plot()
 
 def detect_objects_backsub(frame):
     fg_mask = backsub.apply(frame)
@@ -149,11 +173,25 @@ def update_state(params):
         state[p] = new_val
         print(f"State property \"{p}\" updated to {new_val}")
     socket.emit('state', params)
+
+@socket.on('update_class')
+def update_class(data):
+    class_id = int(data[0])
+    if data[1]:
+        if class_id not in state['classes_to_detect']:
+            state['classes_to_detect'].append(class_id)
+            print(f"Class {class_id} added to \"classes_to_detect\"")
+    else:
+        if class_id in state['classes_to_detect']:
+            state['classes_to_detect'].remove(class_id)
+            print(f"Class {class_id} removed from \"classes_to_detect\"")
+    socket.emit('state', {'classes_to_detect': state['classes_to_detect']})
     
 @socket.on('update_laser_coords')
 def update_laser_coords(new_coords):
     global laser_coords
     laser_coords = new_coords
+    print(f"Laser coordinates updated to {new_coords}")
     socket.emit('laser_coords', new_coords)
 
 if __name__ == '__main__':
