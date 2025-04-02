@@ -32,11 +32,12 @@ print(f"CAMERA WIDTH: {CAMERA_WIDTH}")
 print(f"CAMERA HEIGHT: {CAMERA_HEIGHT}")
 print(f"CAMERA FPS: {CAMERA_FPS}")
 backsub = cv2.createBackgroundSubtractorMOG2(history=200, varThreshold=16, detectShadows=False)
-# model = YOLO("yolo11n.pt")
-model = YOLO("yolov8n.pt")
+model = YOLO("yolo11n.pt")
+# model = YOLO("yolov8n.pt")
 
 def detect_objects_yolo(frame):
-    results = model.track(frame, persist=False)
+    results = model.track(frame, persist=False, show=True, conf=0.8, imgsz=(CAMERA_HEIGHT, CAMERA_WIDTH), half=False, max_det=3)
+    # print(results)
     return results[0].plot()
 
 def detect_objects_backsub(frame):
