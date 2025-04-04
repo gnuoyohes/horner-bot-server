@@ -6,15 +6,10 @@ from ultralytics import YOLO
 import torch
 import base64
 import psutil
+from laser import Laser
 
 app = Flask(__name__)
 socket = SocketIO(app)
-
-thread = None
-thread_lock = Lock()
-thread_event = Event()
-
-client_count = 0
 
 state = {
     'laser_running': False,
@@ -24,7 +19,12 @@ state = {
     'classes_to_detect': [0] # 0: person, 15: cat, 67: cell phone
 }
 
-laser_coords = [0.5, 0.5] # [0, 0] is top left, [1, 1] is bottom right of #laser-container
+thread_lock = Lock()
+thread = None
+thread_event = Event()
+
+laser = Laser(1, 2, 1, 17, 27, 22, 60, socket)
+laser_thread = None
 
 CAMERA_INDEX = 1
 camera = cv2.VideoCapture(CAMERA_INDEX)
@@ -41,6 +41,8 @@ print(f'Using device: {yolo_device}')
 model = YOLO("yolo11s.pt").to(yolo_device)
 # model = YOLO("yolo11n.pt").to(yolo_device)
 # model = YOLO("yolov8n.pt")
+
+client_count = 0
 
 def detect_objects_yolo(frame):
     results = model.track(
@@ -59,7 +61,7 @@ def detect_objects_yolo(frame):
         det = result.boxes[0]
         x, y, width, height = det.xywhn[0].tolist()
         if state['laser_running'] and not state['manual_mode']:
-            socket.emit('laser_coords', [x, y])
+            laser.set_obj_coords([x, y])
         # print(f"{x}, {y}, {width}, {height}")
 
     return result.plot()
@@ -88,7 +90,7 @@ def detect_objects_backsub(frame):
         if state['laser_running'] and not state['manual_mode']:
             laser_x = (x + w/2) / CAMERA_WIDTH
             laser_y = (y + h/2) / CAMERA_HEIGHT
-            socket.emit('laser_coords', [laser_x, laser_y])
+            laser.set_obj_coords([laser_x, laser_y])
         frame_out = cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 0, 200), 3)
 
     # large_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > state['minimum_contour_area']]
@@ -115,7 +117,7 @@ def generate_frames(event):
                 break
     finally:
         event.clear()
-        thread = None
+        # thread = None
 
 @app.route("/")
 def index():
@@ -134,42 +136,56 @@ def index():
 def handle_connect():
     client_id = request.sid
     print(f'Client connected with id: {client_id}')
-    global thread, client_count
+    global thread, laser_thread, client_count
     client_count += 1
 
     socket.emit('state', state)
-    socket.emit('laser_coords', laser_coords)
+    socket.emit('laser_coords', laser.get_laser_coords())
 
     if client_count == 1:
-        with thread_lock:
-            if thread is None:
-                thread_event.set()
-                thread = socket.start_background_task(generate_frames, thread_event)
-                print('Video stream thread started')
+        # with thread_lock:
+        if thread is None:
+            thread_event.set()
+            thread = socket.start_background_task(generate_frames, thread_event)
+            laser_thread = socket.start_background_task(laser.run)
+            print('Video stream and laser threads started')
 
 @socket.on('disconnect')
 def handle_disconnect():
     client_id = request.sid
     print(f'Client disconnected with id: {client_id}')
-    global thread, client_count
+    global thread, laser_thread, client_count
     client_count -= 1
 
     if client_count == 0:
         thread_event.clear()
-        with thread_lock:
-            if thread is not None:
-                thread.join()
-                thread = None
-                print('Video stream thread stopped')
+        laser.stop_thread()
+        # with thread_lock:
+        if thread is not None:
+            thread.join()
+            thread = None
+            laser_thread.join()
+            laser_thread = None
+            print('Video stream and laser threads stopped')
 
 @socket.on('update_state')
 def update_state(params):
     global state
     for p in params:
-        if p == 'minimum_contour_area':
+        new_val = params[p]
+        if p == 'laser_running':
+            if new_val:
+                laser.on()
+            else:
+                laser.off()
+        elif p == 'manual_mode':
+            if new_val:
+                laser.manual_on()
+            else:
+                laser.manual_off()
+        elif p == 'minimum_contour_area':
             new_val = float(params[p])
-        else:
-            new_val = params[p]
+            
         state[p] = new_val
         print(f"State property \"{p}\" updated to {new_val}")
     socket.emit('state', params)
@@ -189,10 +205,8 @@ def update_class(data):
     
 @socket.on('update_laser_coords')
 def update_laser_coords(new_coords):
-    global laser_coords
-    laser_coords = new_coords
+    laser.set_laser_coords(new_coords)
     print(f"Laser coordinates updated to {new_coords}")
-    socket.emit('laser_coords', new_coords)
 
 if __name__ == '__main__':
     socket.run(app, debug=True, host="0.0.0.0")
