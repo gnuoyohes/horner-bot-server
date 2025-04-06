@@ -7,6 +7,7 @@ import torch
 import base64
 import psutil
 from laser import Laser
+from picamera2 import Picamera2
 
 app = Flask(__name__)
 socket = SocketIO(app)
@@ -23,22 +24,30 @@ thread_lock = Lock()
 thread = None
 thread_event = Event()
 
-laser = Laser(1, 2, 1, 17, 27, 22, 60, socket)
+laser = Laser(1, 3, 1, 17, 60, socket)
 laser_thread = None
 
-CAMERA_INDEX = 1
-camera = cv2.VideoCapture(CAMERA_INDEX)
-CAMERA_WIDTH = camera.get(cv2.CAP_PROP_FRAME_WIDTH)
-CAMERA_HEIGHT = camera.get(cv2.CAP_PROP_FRAME_HEIGHT)
-CAMERA_FPS =  camera.get(cv2.CAP_PROP_FPS)
+# CAMERA_INDEX = 0
+# camera = cv2.VideoCapture(CAMERA_INDEX)
+CAMERA_WIDTH = 1280
+CAMERA_HEIGHT = 1280
+# CAMERA_RES_W = 3280
+# CAMERA_RES_H = 2464
+camera = Picamera2()
+# camera.configure(camera.create_preview_configuration(main={"size": (CAMERA_WIDTH, CAMERA_HEIGHT), "format": "RGB888"}, sensor={'output_size': (1296, 972)}))
+camera.preview_configuration.main.size = (CAMERA_WIDTH, CAMERA_HEIGHT)
+camera.preview_configuration.main.format = "RGB888"
+camera.preview_configuration.align()
+camera.configure("preview")
+camera.start()
 print(f"CAMERA WIDTH: {CAMERA_WIDTH}")
 print(f"CAMERA HEIGHT: {CAMERA_HEIGHT}")
-print(f"CAMERA FPS: {CAMERA_FPS}")
 backsub = cv2.createBackgroundSubtractorMOG2(history=200, varThreshold=16, detectShadows=False)
 
 yolo_device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f'Using device: {yolo_device}')
-model = YOLO("yolo11s.pt").to(yolo_device)
+model = YOLO("yolo11n_ncnn_model")
+MODEL_IMGSZ = 320
 # model = YOLO("yolo11n.pt").to(yolo_device)
 # model = YOLO("yolov8n.pt")
 
@@ -47,11 +56,11 @@ client_count = 0
 def detect_objects_yolo(frame):
     results = model.track(
         frame,
+        imgsz = MODEL_IMGSZ,
         verbose=False,
-        persist=True,
-        conf=0.3,
+        persist=False,
+        conf=0.2,
         classes=state['classes_to_detect'],
-        imgsz=(CAMERA_HEIGHT, CAMERA_WIDTH),
         half=False,
         max_det=3
     )
@@ -63,8 +72,26 @@ def detect_objects_yolo(frame):
         if state['laser_running'] and not state['manual_mode']:
             laser.set_obj_coords([x, y])
         # print(f"{x}, {y}, {width}, {height}")
+    else:
+        laser.set_obj_coords([0.5, 0.5])
 
-    return result.plot()
+    annotated_frame = result.plot()
+
+    # Get inference time
+    inference_time = result.speed['inference']
+    fps = 1000 / inference_time  # Convert to milliseconds
+    text = f'FPS: {fps:.1f}'
+
+    # Define font and position
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    text_size = cv2.getTextSize(text, font, 1, 2)[0]
+    text_x = annotated_frame.shape[1] - text_size[0] - 10  # 10 pixels from the right
+    text_y = text_size[1] + 10  # 10 pixels from the top
+
+    # Draw the text on the annotated frame
+    cv2.putText(annotated_frame, text, (text_x, text_y), font, 1, (255, 255, 255), 2, cv2.LINE_AA)
+
+    return annotated_frame
 
 def detect_objects_backsub(frame):
     fg_mask = backsub.apply(frame)
@@ -104,17 +131,14 @@ def generate_frames(event):
     global thread
     try:
         while event.is_set():
-            success, frame = camera.read()
-            if success:
-                if state['use_yolo']:
-                    annotated_frame = detect_objects_yolo(frame)
-                else:
-                    annotated_frame = detect_objects_backsub(frame)
-                _, buffer = cv2.imencode('.jpg', annotated_frame)
-                frame_b64 = base64.b64encode(buffer).decode('utf-8')
-                socket.emit('video_frame', {'image': frame_b64})
+            frame = camera.capture_array()
+            if state['use_yolo']:
+                annotated_frame = detect_objects_yolo(frame)
             else:
-                break
+                annotated_frame = detect_objects_backsub(frame)
+            _, buffer = cv2.imencode('.jpg', annotated_frame)
+            frame_b64 = base64.b64encode(buffer).decode('utf-8')
+            socket.emit('video_frame', {'image': frame_b64})
     finally:
         event.clear()
         # thread = None
@@ -209,4 +233,4 @@ def update_laser_coords(new_coords):
     print(f"Laser coordinates updated to {new_coords}")
 
 if __name__ == '__main__':
-    socket.run(app, debug=True, host="0.0.0.0")
+    socket.run(app, debug=True, use_reloader=False, host="0.0.0.0")

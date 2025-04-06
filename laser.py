@@ -1,46 +1,92 @@
 import math
-from gpiozero import LED, AngularServo
+from gpiozero import LED
+from adafruit_servokit import ServoKit
 from threading import Lock
-import time
+import numpy as np
+
+MIN_SPEED = 0.002
+MAX_SPEED = 0.05
 
 class Laser:
-    def __init__(self, height, width, depth, gpio_diode, gpio_s1, gpio_s2, fps, socket):
+    def __init__(self, height, width, depth, gpio_diode, fps, socket):
         self.h = height
         self.w = width
         self.d = depth
-        # self.diode = LED(gpio_diode)
-        # self.s1 = AngularServo(gpio_s1, min_angle=-90, max_angle=90)
-        # self.s2 = AngularServo(gpio_s2, min_angle=-90, max_angle=90)
+        self.diode = LED(gpio_diode)
+        self.diode.off()
+        self.servos = ServoKit(channels=16)
+        self.servos.servo[0].set_pulse_width_range(500, 2500)
+        self.servos.servo[1].set_pulse_width_range(500, 2500)
+        self.servos.servo[0].angle = 90
+        self.servos.servo[1].angle = 160
         self.fps = fps
         self._obj_coords = [0.5, 0.5] # XY coordinates of the object in 2D space, in ([0, 1], [0, 1])
+        self._prev_obj_coords = [0.5, 0.5]
         self._laser_coords = [0.5, 0.5] # XY coordinates of the object in 2D space, in ([0, 1], [0, 1])
+        self._direction_vector = np.array([1, 0])
         self._socket = socket
         self._lock = Lock()
         self._on = False
         self._manual_mode = False
         self._running_thread = False
     
-    # computes new coordinates of laser based on detected object location
-    @staticmethod
-    def _compute_coords(x, y):
-        return x, y
+    # computes new coordinates of laser
+    def _compute_coords(self):
+        with self._lock:
+            ox, oy = self._obj_coords
+            px, py = self._prev_obj_coords
+            lx, ly = self._laser_coords
+        # theta = math.atan2(ly - oy, lx - ox)
+        # new_theta = np.random.normal(theta, math.pi/9)
+        new_direction_vector = np.array([np.random.normal(x, 0.1) for x in self._direction_vector])
+        diff_vector = np.array([lx - ox, ly - oy])
+        d = np.linalg.norm(diff_vector)
+        if d != 0:
+            diff_vector = diff_vector / d
+        diff_multiplier = 2 - d
+        # multiplier = 0.5
+        mag = np.linalg.norm(np.array([ox - px, oy - py]))
+        self._direction_vector = new_direction_vector + diff_multiplier * diff_vector
+        speed = max(min(mag, MAX_SPEED), MIN_SPEED)
+        # print(speed)
+        # print(f'speed: {speed}, vector: {self._direction_vector}')
+        wall_multiplier = 2
+        if lx < 0.3:
+            self._direction_vector[0] += wall_multiplier * (1 - lx)
+        if lx > 0.7:
+            self._direction_vector[0] -= wall_multiplier * (lx)
+        if ly < 0.3:
+            self._direction_vector[1] += wall_multiplier * (1 - ly)
+        if ly > 0.7:
+            self._direction_vector[1] -= wall_multiplier * (ly)
+
+        norm = np.linalg.norm(self._direction_vector)
+        if norm != 0:
+            self._direction_vector = self._direction_vector / norm
+        
+        new_x = lx + speed * self._direction_vector[0]
+        new_y = ly + speed * self._direction_vector[1]
+        
+        new_x = min(max(new_x, 0), 1)
+        new_y = min(max(new_y, 0), 1)
+        self.set_laser_coords([new_x, new_y])
+        return new_x, new_y
     
-    # converts point (x, y) in the 2D coordinate plane to angles (a, b) of the servos
+    # converts point (x, y) in the 2D coordinate plane to angles (a, b) of the servos, in degrees
     def _xy_to_ab(self, x, y):
         a = math.atan((x*self.w - self.w/2) / (self.w - y*self.w + self.d))
         b = math.acos(self.h / (math.sqrt((self.w - y*self.w + self.d) ** 2 + (x*self.w - self.w/2) ** 2) + self.h ** 2))
-        return a, b
+        return math.degrees(a), math.degrees(b)
 
     def on(self):
         with self._lock:
             self._on = True
-        # self.diode.on()
+        self.diode.off()
     
     def off(self):
         with self._lock:
             self._on = False
-        # self.diode.off()
-
+        self.diode.on()
     def manual_on(self):
         with self._lock:
             self._manual_mode = True
@@ -51,6 +97,7 @@ class Laser:
 
     def set_obj_coords(self, new_coords):
         with self._lock:
+            self._prev_obj_coords = self._obj_coords.copy()
             self._obj_coords = new_coords
 
     def set_laser_coords(self, new_coords):
@@ -68,16 +115,11 @@ class Laser:
             with self._lock:
                 x, y = self._laser_coords
         else:
-            with self._lock:
-                obj_x, obj_y = self._obj_coords
-            x, y = Laser._compute_coords(obj_x, obj_y)
-            self.set_laser_coords([x, y])
+            x, y = self._compute_coords()
         a, b = self._xy_to_ab(x, y)
-        a_deg = math.degrees(a)
-        b_deg = math.degrees(b)
-        print(f'{a_deg}, {b_deg}')
-        # self.s1.angle = a
-        # self.s2.angle = b
+        # print(f'{a}, {b}')
+        self.servos.servo[0].angle = 90 - a
+        self.servos.servo[1].angle = 180 - b
         self._socket.emit('laser_coords', [x, y])
 
     def stop_thread(self):
