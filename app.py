@@ -2,13 +2,13 @@ from flask import Flask, render_template, request
 from flask_socketio import SocketIO
 from threading import Event, Lock
 import cv2
-from ultralytics import YOLO
-import torch
+# from ultralytics import YOLO
+# import torch
 import base64
 import psutil
 import time
 
-from picamera2 import MappedArray, Picamera2
+from picamera2 import Picamera2
 from picamera2.devices import Hailo
 
 

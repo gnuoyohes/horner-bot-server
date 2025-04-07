@@ -71,14 +71,14 @@ if is_sourced; then
         else
             echo "You are not in the $VENV_NAME virtual environment."
             # Check if the virtual environment exists in the same directory as the script
-            if [ -d "$SCRIPT_DIR/$VENV_NAME" ]; then
-                echo "Virtual environment exists. Activating..."
-                source "$SCRIPT_DIR/$VENV_NAME/bin/activate"
-            else
-                echo "Virtual environment does not exist. Creating and activating..."
-                python3 -m venv --system-site-packages "$SCRIPT_DIR/$VENV_NAME"
-                source "$SCRIPT_DIR/$VENV_NAME/bin/activate"
-            fi
+            # if [ -d "$SCRIPT_DIR/$VENV_NAME" ]; then
+            #     echo "Virtual environment exists. Activating..."
+            #     source "$SCRIPT_DIR/$VENV_NAME/bin/activate"
+            # else
+            #     echo "Virtual environment does not exist. Creating and activating..."
+            #     python3 -m venv --system-site-packages "$SCRIPT_DIR/$VENV_NAME"
+            #     source "$SCRIPT_DIR/$VENV_NAME/bin/activate"
+            # fi
         fi
         TAPPAS_POST_PROC_DIR=$(pkg-config --variable=tappas_postproc_lib_dir hailo-tappas-core)
     else

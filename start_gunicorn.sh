@@ -1,18 +1,12 @@
 #!/bin/bash
-
-# Set the application module and variable name
-APP_MODULE="app"
-APP_VARIABLE="app"
+source setup_hailo_env.sh
 
 # Set the bind address and port
 BIND_ADDRESS="0.0.0.0"
 BIND_PORT="5000"
 
-# Set the number of worker processes
-WORKERS="1"
-
 # Set the path to the virtual environment (if applicable)
-VENV_PATH="/.venv"
+VENV_PATH=".venv"
 
 # Activate the virtual environment (if applicable)
 if [ -n "$VENV_PATH" ]; then
@@ -20,7 +14,7 @@ if [ -n "$VENV_PATH" ]; then
 fi
 
 # Start Gunicorn
-gunicorn -b "$BIND_ADDRESS:$BIND_PORT" -w "$WORKERS" "$APP_MODULE:$APP_VARIABLE"
+gunicorn -b "$BIND_ADDRESS:$BIND_PORT" --worker-class eventlet -w 1 app:app
 
 # Deactivate the virtual environment (if applicable)
 if [ -n "$VENV_PATH" ]; then
