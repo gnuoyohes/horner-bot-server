@@ -9,10 +9,10 @@ BIND_ADDRESS="0.0.0.0"
 BIND_PORT="5000"
 
 # Set the number of worker processes
-WORKERS="5"
+WORKERS="1"
 
 # Set the path to the virtual environment (if applicable)
-VENV_PATH="/venv"
+VENV_PATH="/.venv"
 
 # Activate the virtual environment (if applicable)
 if [ -n "$VENV_PATH" ]; then

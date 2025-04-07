@@ -38,12 +38,13 @@ class Laser:
             lx, ly = self._laser_coords
         # theta = math.atan2(ly - oy, lx - ox)
         # new_theta = np.random.normal(theta, math.pi/9)
-        new_direction_vector = np.array([np.random.normal(x, 0.1) for x in self._direction_vector])
+        new_direction_vector = np.array([np.random.normal(x, 0.3) for x in self._direction_vector])
         diff_vector = np.array([lx - ox, ly - oy])
         d = np.linalg.norm(diff_vector)
         if d != 0:
             diff_vector = diff_vector / d
-        diff_multiplier = 2 - d
+        diff_multiplier = 2 * 0.2 ** d
+        # print(diff_multiplier)
         # multiplier = 0.5
         mag = np.linalg.norm(np.array([ox - px, oy - py]))
         self._direction_vector = new_direction_vector + diff_multiplier * diff_vector
@@ -70,7 +71,6 @@ class Laser:
         new_x = min(max(new_x, 0), 1)
         new_y = min(max(new_y, 0), 1)
         self.set_laser_coords([new_x, new_y])
-        return new_x, new_y
     
     # converts point (x, y) in the 2D coordinate plane to angles (a, b) of the servos, in degrees
     def _xy_to_ab(self, x, y):
@@ -81,12 +81,12 @@ class Laser:
     def on(self):
         with self._lock:
             self._on = True
-        self.diode.off()
+        self.diode.on()
     
     def off(self):
         with self._lock:
             self._on = False
-        self.diode.on()
+        self.diode.off()
     def manual_on(self):
         with self._lock:
             self._manual_mode = True
@@ -99,6 +99,7 @@ class Laser:
         with self._lock:
             self._prev_obj_coords = self._obj_coords.copy()
             self._obj_coords = new_coords
+        self._compute_coords()
 
     def set_laser_coords(self, new_coords):
         with self._lock:
@@ -109,13 +110,8 @@ class Laser:
             return self._laser_coords
     
     def moveLaser(self):
-        # implement
-        
-        if self._manual_mode:
-            with self._lock:
-                x, y = self._laser_coords
-        else:
-            x, y = self._compute_coords()
+        with self._lock:
+            x, y = self._laser_coords
         a, b = self._xy_to_ab(x, y)
         # print(f'{a}, {b}')
         self.servos.servo[0].angle = 90 - a

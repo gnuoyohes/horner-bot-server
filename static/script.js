@@ -64,6 +64,18 @@ socket.on('state', function(data) {
     }
 })
 
+var now = Date.now()
+
+socket.on('stats', function(stats) {
+    const newNow = Date.now()
+    if (Date.now() - now > 500) {
+        $('#fps').text(`FPS: ${stats['fps']}`)
+        $('#cpu').text(`CPU Usage: ${stats['cpu_percent']}`)
+        $('#ram').text(`Memory Usage: ${stats['memory_percent']}`)
+        now = newNow
+    }
+})
+
 socket.on('laser_coords', function(coords) {
     if (!dragging) {
         var coordsX = coords[0]

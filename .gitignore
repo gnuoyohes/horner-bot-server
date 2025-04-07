@@ -1,3 +1,5 @@
 venv/
 .venv/
+venv_hailo_rpi5_examples/
+*.log
 __pycache__/
