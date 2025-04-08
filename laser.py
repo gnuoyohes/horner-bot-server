@@ -4,21 +4,19 @@ from adafruit_servokit import ServoKit
 from threading import Lock
 import numpy as np
 
-MIN_SPEED = 0.002
-MAX_SPEED = 0.05
+MIN_SPEED = 0.005
+MAX_SPEED = 0.5
 
 class Laser:
-    def __init__(self, height, width, depth, gpio_diode, fps, socket):
+    def __init__(self, height, width, depth, a_offset, b_offset, gpio_diode, fps, socket):
         self.h = height
         self.w = width
         self.d = depth
+        self.a_offset = a_offset
+        self.b_offset = b_offset
         self.diode = LED(gpio_diode)
         self.diode.off()
-        self.servos = ServoKit(channels=16)
-        self.servos.servo[0].set_pulse_width_range(500, 2500)
-        self.servos.servo[1].set_pulse_width_range(500, 2500)
-        self.servos.servo[0].angle = 90
-        self.servos.servo[1].angle = 160
+        self.servos = None
         self.fps = fps
         self._obj_coords = [0.5, 0.5] # XY coordinates of the object in 2D space, in ([0, 1], [0, 1])
         self._prev_obj_coords = [0.5, 0.5]
@@ -43,12 +41,12 @@ class Laser:
         d = np.linalg.norm(diff_vector)
         if d != 0:
             diff_vector = diff_vector / d
-        diff_multiplier = 2 * 0.2 ** d
+        diff_multiplier = 5 * 0.2 ** d
         # print(diff_multiplier)
         # multiplier = 0.5
         mag = np.linalg.norm(np.array([ox - px, oy - py]))
         self._direction_vector = new_direction_vector + diff_multiplier * diff_vector
-        speed = max(min(mag, MAX_SPEED), MIN_SPEED)
+        speed = max(min(2 * mag, MAX_SPEED), MIN_SPEED)
         # print(speed)
         # print(f'speed: {speed}, vector: {self._direction_vector}')
         wall_multiplier = 2
@@ -75,18 +73,25 @@ class Laser:
     # converts point (x, y) in the 2D coordinate plane to angles (a, b) of the servos, in degrees
     def _xy_to_ab(self, x, y):
         a = math.atan((x*self.w - self.w/2) / (self.w - y*self.w + self.d))
-        b = math.acos(self.h / (math.sqrt((self.w - y*self.w + self.d) ** 2 + (x*self.w - self.w/2) ** 2) + self.h ** 2))
-        return math.degrees(a), math.degrees(b)
+        b = math.acos(self.h / (math.sqrt((self.w - y*self.w + self.d) ** 2 + (x*self.w - self.w/2) ** 2 + self.h ** 2)))
+        return math.degrees(a) + self.a_offset, math.degrees(b) + self.b_offset
 
     def on(self):
+        self.servos = ServoKit(channels=16)
+        self.servos.servo[0].set_pulse_width_range(500, 2500)
+        self.servos.servo[1].set_pulse_width_range(500, 2500)
+        self.servos.servo[0].angle = 90
+        self.servos.servo[1].angle = 160
+        self.diode.on()
         with self._lock:
             self._on = True
-        self.diode.on()
     
     def off(self):
+        self.servos = None
+        self.diode.off()
         with self._lock:
             self._on = False
-        self.diode.off()
+
     def manual_on(self):
         with self._lock:
             self._manual_mode = True
@@ -110,13 +115,14 @@ class Laser:
             return self._laser_coords
     
     def moveLaser(self):
-        with self._lock:
-            x, y = self._laser_coords
-        a, b = self._xy_to_ab(x, y)
-        # print(f'{a}, {b}')
-        self.servos.servo[0].angle = 90 - a
-        self.servos.servo[1].angle = 180 - b
-        self._socket.emit('laser_coords', [x, y])
+        if self.servos:
+            with self._lock:
+                x, y = self._laser_coords
+            a, b = self._xy_to_ab(x, y)
+            # print(f'{a}, {b}')
+            self.servos.servo[0].angle = 90 - a
+            self.servos.servo[1].angle = 180 - b
+            self._socket.emit('laser_coords', [x, y])
 
     def stop_thread(self):
         with self._lock:

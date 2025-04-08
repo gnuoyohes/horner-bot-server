@@ -15,31 +15,31 @@ from picamera2.devices import Hailo
 from laser import Laser
 
 app = Flask(__name__)
-socket = SocketIO(app)
+socket = SocketIO(app, async_mode='threading')
 
 client_count = 0
 
 state = {
     'laser_running': False,
-    'use_yolo': False,
+    'use_yolo': True,
     'minimum_contour_area': 2000,
     'manual_mode': False,
-    'classes_to_detect': [0] # 0: person, 15: cat, 67: cell phone
+    'classes_to_detect': [15] # 0: person, 15: cat, 67: cell phone
 }
 
 thread_lock = Lock()
 thread = None
 thread_event = Event()
 
-laser = Laser(1, 3, 1, 17, 60, socket)
+laser = Laser(1, 2.5, 1, 0, 0, 17, 60, socket)
 laser_thread = None
 
-hailo = Hailo('resources/yolov8s_h8l.hef')
+hailo = Hailo('resources/yolov8m_h8l.hef')
 hailo_thread_lock = Lock()
 # Load class names from the labels file
 with open('resources/coco.txt', 'r', encoding="utf-8") as f:
     CLASS_NAMES = f.read().splitlines()
-CONFIDENCE_THRESH = 0.3
+CONFIDENCE_THRESH = 0.2
 
 # CAMERA_INDEX = 0
 # camera = cv2.VideoCapture(CAMERA_INDEX)
@@ -276,7 +276,7 @@ def update_class(data):
 @socket.on('update_laser_coords')
 def update_laser_coords(new_coords):
     laser.set_laser_coords(new_coords)
-    print(f"Laser coordinates updated to {new_coords}")
+    # print(f"Laser coordinates updated to {new_coords}")
 
 if __name__ == '__main__':
     socket.run(app, debug=True, use_reloader=False, host="0.0.0.0")

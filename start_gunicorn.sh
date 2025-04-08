@@ -14,7 +14,7 @@ if [ -n "$VENV_PATH" ]; then
 fi
 
 # Start Gunicorn
-gunicorn -b "$BIND_ADDRESS:$BIND_PORT" --worker-class eventlet -w 1 app:app
+gunicorn -b "$BIND_ADDRESS:$BIND_PORT" --threads 10 -w 1 app:app
 
 # Deactivate the virtual environment (if applicable)
 if [ -n "$VENV_PATH" ]; then
