@@ -4,11 +4,11 @@ from adafruit_servokit import ServoKit
 from threading import Lock
 import numpy as np
 
-MIN_SPEED = 0.005
+MIN_SPEED = 0.01
 MAX_SPEED = 0.5
 
 class Laser:
-    def __init__(self, height, width, depth, a_offset, b_offset, gpio_diode, fps, socket):
+    def __init__(self, height, width, depth, a_offset, b_offset, gpio_diode, gpio_servers, fps, socket):
         self.h = height
         self.w = width
         self.d = depth
@@ -16,6 +16,8 @@ class Laser:
         self.b_offset = b_offset
         self.diode = LED(gpio_diode)
         self.diode.off()
+        self.servo_power = LED(gpio_servers)
+        self.servo_power.off()
         self.servos = None
         self.fps = fps
         self._obj_coords = [0.5, 0.5] # XY coordinates of the object in 2D space, in ([0, 1], [0, 1])
@@ -41,7 +43,7 @@ class Laser:
         d = np.linalg.norm(diff_vector)
         if d != 0:
             diff_vector = diff_vector / d
-        diff_multiplier = 5 * 0.2 ** d
+        diff_multiplier = 5 * 0.3 ** d
         # print(diff_multiplier)
         # multiplier = 0.5
         mag = np.linalg.norm(np.array([ox - px, oy - py]))
@@ -49,7 +51,7 @@ class Laser:
         speed = max(min(2 * mag, MAX_SPEED), MIN_SPEED)
         # print(speed)
         # print(f'speed: {speed}, vector: {self._direction_vector}')
-        wall_multiplier = 2
+        wall_multiplier = 4
         if lx < 0.3:
             self._direction_vector[0] += wall_multiplier * (1 - lx)
         if lx > 0.7:
@@ -77,18 +79,20 @@ class Laser:
         return math.degrees(a) + self.a_offset, math.degrees(b) + self.b_offset
 
     def on(self):
+        self.servo_power.on()
+        self.diode.on()
         self.servos = ServoKit(channels=16)
         self.servos.servo[0].set_pulse_width_range(500, 2500)
         self.servos.servo[1].set_pulse_width_range(500, 2500)
         self.servos.servo[0].angle = 90
         self.servos.servo[1].angle = 160
-        self.diode.on()
         with self._lock:
             self._on = True
     
     def off(self):
-        self.servos = None
+        self.servo_power.off()
         self.diode.off()
+        self.servos = None
         with self._lock:
             self._on = False
 
@@ -132,7 +136,7 @@ class Laser:
         self._running_thread = True
         period = 1.0 / self.fps
         running = True
-        while(running):
+        while(True):
             self._socket.sleep(period)
             with self._lock:
                 on = self._on
@@ -140,3 +144,6 @@ class Laser:
                 self.moveLaser()
             with self._lock:
                 running = self._running_thread
+            if not running:
+                self.off()
+                return

@@ -7,9 +7,14 @@ const CLASSES = {
 // var socket = io.connect('10.0.0.39:5000');
 var socket = io()
 
+socket.on('connect', function() {
+    console.log(socket.io.engine.transport.name);
+})
+
+
 socket.on('video_frame', function(data) {
     $('#videoStream').attr('src', 'data:image/jpeg;base64,' + data.image);
-});
+})
 
 socket.on('state', function(data) {
     for (const key in data) {

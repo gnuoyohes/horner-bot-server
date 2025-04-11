@@ -123,8 +123,6 @@ Pygments==2.19.1
 PyGObject==3.42.2
 PyOpenGL==3.1.6
 pyparsing==3.2.3
-PyQt5==5.15.9
-PyQt5-sip==12.11.1
 pyrsistent==0.18.1
 pyserial==3.5
 python-apt==2.6.0

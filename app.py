@@ -15,7 +15,7 @@ from picamera2.devices import Hailo
 from laser import Laser
 
 app = Flask(__name__)
-socket = SocketIO(app, async_mode='threading')
+socket = SocketIO(app, async_mode='threading', cors_allowed_origins="*")
 
 client_count = 0
 
@@ -31,7 +31,7 @@ thread_lock = Lock()
 thread = None
 thread_event = Event()
 
-laser = Laser(1, 2.5, 1, 0, 0, 17, 60, socket)
+laser = Laser(1, 2.5, 1, 0, 0, 27, 17, 60, socket)
 laser_thread = None
 
 hailo = Hailo('resources/yolov8m_h8l.hef')
