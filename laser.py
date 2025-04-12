@@ -79,21 +79,21 @@ class Laser:
         return math.degrees(a) + self.a_offset, math.degrees(b) + self.b_offset
 
     def on(self):
-        self.servo_power.on()
-        self.diode.on()
-        self.servos = ServoKit(channels=16)
-        self.servos.servo[0].set_pulse_width_range(500, 2500)
-        self.servos.servo[1].set_pulse_width_range(500, 2500)
-        self.servos.servo[0].angle = 90
-        self.servos.servo[1].angle = 160
         with self._lock:
+            self.servo_power.on()
+            self.diode.on()
+            self.servos = ServoKit(channels=16)
+            self.servos.servo[0].set_pulse_width_range(500, 2500)
+            self.servos.servo[1].set_pulse_width_range(500, 2500)
+            self.servos.servo[0].angle = 90
+            self.servos.servo[1].angle = 160
             self._on = True
     
     def off(self):
-        self.servo_power.off()
-        self.diode.off()
-        self.servos = None
         with self._lock:
+            self.servo_power.off()
+            self.diode.off()
+            self.servos = None
             self._on = False
 
     def manual_on(self):
@@ -119,14 +119,15 @@ class Laser:
             return self._laser_coords
     
     def moveLaser(self):
-        if self.servos:
-            with self._lock:
-                x, y = self._laser_coords
-            a, b = self._xy_to_ab(x, y)
-            # print(f'{a}, {b}')
-            self.servos.servo[0].angle = 90 - a
-            self.servos.servo[1].angle = 180 - b
-            self._socket.emit('laser_coords', [x, y])
+        with self._lock:
+            x, y = self._laser_coords
+        a, b = self._xy_to_ab(x, y)
+        # print(f'{a}, {b}')
+        with self._lock:
+            if self.servos:
+                self.servos.servo[0].angle = 90 - a
+                self.servos.servo[1].angle = 180 - b
+        self._socket.emit('laser_coords', [x, y])
 
     def stop_thread(self):
         with self._lock:

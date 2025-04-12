@@ -1,12 +1,14 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, Response
 from flask_socketio import SocketIO
 from threading import Event, Lock
 import cv2
+from PIL import Image
 # from ultralytics import YOLO
 # import torch
 import base64
 import psutil
 import time
+import io
 
 from picamera2 import Picamera2
 from picamera2.devices import Hailo
@@ -14,7 +16,12 @@ from picamera2.devices import Hailo
 
 from laser import Laser
 
+# import logging
+# logging.basicConfig(level=logging.DEBUG, filename="log", filemode="a+",
+                        # format="%(asctime)-15s %(levelname)-8s %(message)s")
+
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'horner'
 socket = SocketIO(app, async_mode='threading', cors_allowed_origins="*")
 
 client_count = 0
@@ -35,7 +42,7 @@ laser = Laser(1, 2.5, 1, 0, 0, 27, 17, 60, socket)
 laser_thread = None
 
 hailo = Hailo('resources/yolov8m_h8l.hef')
-hailo_thread_lock = Lock()
+# hailo_thread_lock = Lock()
 # Load class names from the labels file
 with open('resources/coco.txt', 'r', encoding="utf-8") as f:
     CLASS_NAMES = f.read().splitlines()
@@ -56,6 +63,8 @@ controls = {'FrameRate': 60}
 config = camera.create_preview_configuration(main, lores=lores, controls=controls)
 camera.configure(config)
 camera.start()
+
+frame_out_bytes = None
 
 backsub = cv2.createBackgroundSubtractorMOG2(history=200, varThreshold=16, detectShadows=False)
 
@@ -165,42 +174,58 @@ def detect_objects_backsub(frame):
     return frame_out
 
 def generate_frames(event):
-    global thread
-    try:
-        while event.is_set():
-            start_time = time.time()
-            frame = camera.capture_array('lores')
-            if state['use_yolo']:
-                # annotated_frame = detect_objects_yolo(frame)
-                annotated_frame = detect_objects_hailo(frame)
-            else:
-                annotated_frame = detect_objects_backsub(frame)
-            _, buffer = cv2.imencode('.jpg', annotated_frame)
-            frame_b64 = base64.b64encode(buffer).decode('utf-8')
-            socket.emit('video_frame', {'image': frame_b64})
-            fps = 1.0 / (time.time() - start_time)
-            stats = {
-                'fps': round(fps, 1),
-                'cpu_percent': psutil.cpu_percent(),
-                'memory_percent': psutil.virtual_memory().percent
-            }
-            socket.emit('stats', stats)
-    finally:
-        event.clear()
-        # thread = None
+    global frame_out_bytes
+    while event.is_set():
+        start_time = time.time()
+        frame = camera.capture_array('lores')
+        if state['use_yolo']:
+            # annotated_frame = detect_objects_yolo(frame)
+            annotated_frame = detect_objects_hailo(frame)
+        else:
+            annotated_frame = detect_objects_backsub(frame)
+        _, buffer = cv2.imencode('.jpg', annotated_frame)
+        # frame_b64 = base64.b64encode(buffer).decode('utf-8')
+        # print(f'Size: {len(frame_b64) * 3 / 4}')
+
+        # Save the image to a BytesIO object
+        with thread_lock:
+            frame_out_bytes = buffer.tobytes()
+        # socket.emit('video_frame', {'image': frame_b64})
+        
+
+        fps = 1.0 / (time.time() - start_time)
+        stats = {
+            'server_fps': round(fps, 1),
+            'cpu_percent': psutil.cpu_percent(),
+            'memory_percent': psutil.virtual_memory().percent
+        }
+        socket.emit('stats', stats)
+
+# def send_frames():
+#     while True:
+#         # socket.sleep(0.1)
+#         if frame_out_bytes:
+#             # print("Size: " + len(frame_out_bytes))
+#             yield (b'--frame\r\n'
+#                     b'Content-Type: image/jpeg\r\n' 
+#                     b'Content-Length: ' + str(len(frame_out_bytes)).encode() + b'\r\n\r\n'+ 
+#                     frame_out_bytes + b'\r\n')
 
 @app.route("/")
 def index():
     return render_template('index.html')
-    
-# @app.route('/system_info', methods=['GET'])
-# def system_info():
-#     stats = {
-#         'cpu_percent': psutil.cpu_percent(),
-#         'memory_percent': psutil.virtual_memory().percent,
-#         'disk_percent': psutil.disk_usage('/').percent
-#     }
-#     return stats
+
+@app.route('/video_frame')
+def video_frame():
+    with thread_lock:
+        if frame_out_bytes:
+            response = Response(frame_out_bytes)
+            return response
+        else:
+            return '', 204
+
+    # return Response(send_frames(),
+    #                 mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @socket.on('connect')
 def handle_connect():
@@ -208,35 +233,35 @@ def handle_connect():
     print(f'Client connected with id: {client_id}')
     global thread, laser_thread, client_count
     client_count += 1
+    print(f'Client count: {client_count}')
 
     socket.emit('state', state)
     socket.emit('laser_coords', laser.get_laser_coords())
 
-    if client_count == 1:
-        with thread_lock:
-            if thread is None:
-                thread_event.set()
-                thread = socket.start_background_task(generate_frames, thread_event)
-                laser_thread = socket.start_background_task(laser.run)
-                print('Video stream and laser threads started')
+    if thread is None:
+        thread_event.set()
+        thread = socket.start_background_task(generate_frames, thread_event)
+        laser_thread = socket.start_background_task(laser.run)
+        print('Video stream and laser threads started')
 
 @socket.on('disconnect')
 def handle_disconnect():
     client_id = request.sid
     print(f'Client disconnected with id: {client_id}')
-    global thread, laser_thread, client_count
+    global thread, laser_thread, client_count, frame_out_bytes
     client_count -= 1
+    print(f'Client count: {client_count}')
 
     if client_count == 0:
         thread_event.clear()
         laser.stop_thread()
-        with thread_lock:
-            if thread is not None:
-                thread.join()
-                thread = None
-                laser_thread.join()
-                laser_thread = None
-                print('Video stream and laser threads stopped')
+        if thread is not None:
+            thread.join()
+            thread = None
+            laser_thread.join()
+            laser_thread = None
+            frame_out_bytes = None
+            print('Video stream and laser threads stopped')
 
 @socket.on('update_state')
 def update_state(params):
@@ -279,4 +304,4 @@ def update_laser_coords(new_coords):
     # print(f"Laser coordinates updated to {new_coords}")
 
 if __name__ == '__main__':
-    socket.run(app, debug=True, use_reloader=False, host="0.0.0.0")
+    socket.run(app, host="0.0.0.0", port=5000)

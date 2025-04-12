@@ -5,18 +5,37 @@ const CLASSES = {
 }
 
 // var socket = io.connect('10.0.0.39:5000');
-var socket = io()
+var socket = io({transports: ['websocket']})
 
 socket.on('connect', function() {
     console.log(socket.io.engine.transport.name);
 })
 
 
-socket.on('video_frame', function(data) {
-    $('#videoStream').attr('src', 'data:image/jpeg;base64,' + data.image);
-})
+// socket.on('video_frame', async data => {
+//     $('#videoStream').attr('src', 'data:image/jpeg;base64,' + data.image);
+// })
+
+var clientFps = 0
+
+async function fetchFrame() {
+    // startTime = performance.now();
+    fetch('/video_frame').then(response => {
+        return response.blob()
+    })
+    .then(blob => {
+        const imageURL = URL.createObjectURL(blob);
+        $('#videoStream').attr('src', imageURL);
+        // endTime = performance.now();
+        // clientFps = Math.round(1000 / (endTime - startTime) * 10) / 10
+    })
+    
+    // $('#videoStream').attr('src', 'data:image/jpeg;base64,' + response.body);
+    // $('#videoStream').css('background-image', 'url(' + imageObjectURL + ')');
+}
 
 socket.on('state', function(data) {
+    console.log(socket.io.engine.transport.name);
     for (const key in data) {
         switch (key) {
             case 'use_yolo':
@@ -74,7 +93,8 @@ var now = Date.now()
 socket.on('stats', function(stats) {
     const newNow = Date.now()
     if (Date.now() - now > 500) {
-        $('#fps').text(`FPS: ${stats['fps']}`)
+        // $('#client-fps').text(`Client FPS: ${clientFps}`)
+        $('#server-fps').text(`Server FPS: ${stats['server_fps']}`)
         $('#cpu').text(`CPU Usage: ${stats['cpu_percent']}`)
         $('#ram').text(`Memory Usage: ${stats['memory_percent']}`)
         now = newNow
@@ -175,3 +195,5 @@ window.addEventListener('resize', function() {
     containerHeight = $('#laser-container').outerHeight()
     updateLaserPosition(laserPositionScaled[0], laserPositionScaled[1])
 });
+
+setInterval(fetchFrame, 16)

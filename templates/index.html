@@ -22,7 +22,7 @@
         </div>
         <div class="row pt-3">
             <div class="col-lg-7">
-                <img id="videoStream" class="img-fluid rounded-2 mb-3" src="" alt="Video Stream">
+                <img id="videoStream" class="img-fluid rounded-2 mb-3" alt="Video Stream">
                 <div class="form-check form-switch mb-3">
                     <input class="form-check-input" type="checkbox" id="yoloSwitch" onclick="handleYoloCheckbox(this)">
                     <label class="form-check-label" for="yoloSwitch">Use YOLO Object Detection</label>
@@ -67,7 +67,8 @@
                             Stats
                         </div>
                         <ul class="list-group list-group-flush">
-                            <li class="list-group-item" id="fps"></li>
+                            <!-- <li class="list-group-item" id="client-fps"></li> -->
+                            <li class="list-group-item" id="server-fps"></li>
                             <li class="list-group-item" id="cpu"></li>
                             <li class="list-group-item" id="ram"></li>
                         </ul>
