@@ -8,7 +8,7 @@ MIN_SPEED = 0.01
 MAX_SPEED = 0.5
 
 class Laser:
-    def __init__(self, height, width, depth, a_offset, b_offset, gpio_diode, gpio_servers, fps, socket):
+    def __init__(self, height, width, depth, a_offset, b_offset, gpio_diode, gpio_servos, fps, socket):
         self.h = height
         self.w = width
         self.d = depth
@@ -16,7 +16,7 @@ class Laser:
         self.b_offset = b_offset
         self.diode = LED(gpio_diode)
         self.diode.off()
-        self.servo_power = LED(gpio_servers)
+        self.servo_power = LED(gpio_servos)
         self.servo_power.off()
         self.servos = None
         self.fps = fps
