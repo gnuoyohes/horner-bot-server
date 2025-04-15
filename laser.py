@@ -51,7 +51,7 @@ class Laser:
         speed = max(min(2 * mag, MAX_SPEED), MIN_SPEED)
         # print(speed)
         # print(f'speed: {speed}, vector: {self._direction_vector}')
-        wall_multiplier = 4
+        wall_multiplier = 3
         if lx < 0.3:
             self._direction_vector[0] += wall_multiplier * (1 - lx)
         if lx > 0.7:

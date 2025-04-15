@@ -1,28 +1,44 @@
-from flask import Flask, render_template, request, Response
+from flask import Flask, render_template, redirect, url_for, flash, request, Response, session
 from flask_socketio import SocketIO
+from flask_login import LoginManager, UserMixin, current_user, login_user, logout_user, fresh_login_required
+
 from threading import Event, Lock
 import cv2
-from PIL import Image
 # from ultralytics import YOLO
 # import torch
-import base64
 import psutil
 import time
-import io
+from datetime import timedelta
 
 from picamera2 import Picamera2
 from picamera2.devices import Hailo
 
 
 from laser import Laser
+from login_form import LoginForm
 
 # import logging
 # logging.basicConfig(level=logging.DEBUG, filename="log", filemode="a+",
                         # format="%(asctime)-15s %(levelname)-8s %(message)s")
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'horner'
+app.config['SECRET_KEY'] = 'hornerbot328'
+app.config['TESTING'] = False
 socket = SocketIO(app, async_mode='threading', cors_allowed_origins="*")
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+class User(UserMixin):
+        def __init__(self, id, username, password):
+            self.id = id
+            self.username = username
+            self.password = password
+
+users = [
+    User(0, 'seho', 'horner328'),
+    User(1, 'elizabeth', 'horner328')
+]
 
 client_count = 0
 
@@ -211,11 +227,18 @@ def generate_frames(event):
 #                     b'Content-Length: ' + str(len(frame_out_bytes)).encode() + b'\r\n\r\n'+ 
 #                     frame_out_bytes + b'\r\n')
 
+@app.before_request
+def before_request():
+    session.permanent = True
+    app.permanent_session_lifetime = timedelta(seconds=10)
+
 @app.route("/")
+@fresh_login_required
 def index():
     return render_template('index.html')
 
 @app.route('/video_frame')
+@fresh_login_required
 def video_frame():
     with thread_lock:
         if frame_out_bytes:
@@ -226,6 +249,30 @@ def video_frame():
 
     # return Response(send_frames(),
     #                 mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    form = LoginForm()
+    if form.validate_on_submit():
+        user = None
+        for u in users:
+            if u.username == form.username.data and u.password == form.password.data:
+                user = u
+        if user is None:
+            flash('Invalid username or password')
+            return redirect(url_for('login'))
+        login_user(user, remember=False)
+        return redirect(url_for('index'))
+    return render_template('login.html', title='Sign In', form=form)
+
+@login_manager.user_loader
+def load_user(user_id):
+    for user in users:
+        if user.id == int(user_id):
+            return user
+    return None
 
 @socket.on('connect')
 def handle_connect():
@@ -246,6 +293,8 @@ def handle_connect():
 
 @socket.on('disconnect')
 def handle_disconnect():
+    logout_user()
+    session.clear()
     client_id = request.sid
     print(f'Client disconnected with id: {client_id}')
     global thread, laser_thread, client_count, frame_out_bytes
