@@ -17,6 +17,7 @@ socket.on('connect', function() {
 // })
 
 var clientFps = 0
+var imageURL = null
 
 async function fetchFrame() {
     // startTime = performance.now();
@@ -24,8 +25,12 @@ async function fetchFrame() {
         return response.blob()
     })
     .then(blob => {
-        const imageURL = URL.createObjectURL(blob);
+        if (imageURL) {
+            URL.revokeObjectURL(imageURL)
+        }
+        imageURL = URL.createObjectURL(blob);
         $('#videoStream').attr('src', imageURL);
+        
         // endTime = performance.now();
         // clientFps = Math.round(1000 / (endTime - startTime) * 10) / 10
     })
