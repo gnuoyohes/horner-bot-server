@@ -3,4 +3,5 @@ venv/
 venv_hailo_rpi5_examples/
 *.log
 log
+.lgd-nfy0
 __pycache__/

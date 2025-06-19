@@ -304,6 +304,7 @@ def handle_disconnect():
     if client_count == 0:
         thread_event.clear()
         laser.stop_thread()
+        update_state({'laser_running': False})
         if thread is not None:
             thread.join()
             thread = None
