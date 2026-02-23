@@ -54,7 +54,7 @@ thread_lock = Lock()
 thread = None
 thread_event = Event()
 
-laser = Laser(1, 2.5, 1, 0, 0, 27, 17, 60, socket)
+laser = Laser(1, 2.5, 0.5, 0, 0, 27, 17, 60, socket)
 laser_thread = None
 
 hailo = Hailo('resources/yolov8m_h8l.hef')
